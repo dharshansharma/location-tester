@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Location Tester">
+<title>Location Tester</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f3f4f6;color:#111827}
+.wrap{max-width:760px;margin:auto;padding:16px}
+.card{background:white;border:1px solid #e5e7eb;border-radius:16px;padding:14px;margin-bottom:14px}
+.row{display:flex;gap:8px}
+input{flex:1;padding:12px;border:1px solid #d1d5db;border-radius:12px;font-size:16px}
+button{padding:12px 14px;border:0;border-radius:12px;font-weight:600}
+.primary{background:#2563eb;color:white}.secondary{background:#eef2ff;color:#1e3a8a}.danger{background:#fee2e2;color:#991b1b}
+#map{height:420px;border-radius:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.small{font-size:13px;color:#6b7280}.result,.favorite{padding:10px;border:1px solid #e5e7eb;border-radius:10px;margin-top:8px}
+.status{font-size:14px;color:#6b7280;margin-top:10px}.active{color:#15803d;font-weight:700}
+</style>
+</head>
+<body>
+<main class="wrap">
+<h1>Location Tester</h1>
+<p class="small">Choose test coordinates for your own web-development projects.</p>
+
+<section class="card">
+<div class="row">
+<input id="q" placeholder="Search a place or address…">
+<button id="search" class="primary">Search</button>
+</div>
+<div id="results"></div>
+</section>
+
+<section class="card">
+<div id="map"></div>
+<div id="status" class="status">Tap the map or search for a place.</div>
+<div class="grid">
+<button id="setTest" class="primary">Set Test Location</button>
+<button id="real" class="secondary">Use My Real Location</button>
+<button id="save">Save Favorite</button>
+<button id="clear" class="danger">Clear Test Location</button>
+</div>
+</section>
+
+<section class="card">
+<strong>Selected coordinates</strong>
+<div id="coords" class="small">None selected</div>
+</section>
+
+<section class="card">
+<strong>Favorites</strong>
+<div id="favorites"></div>
+</section>
+
+<section class="card small">
+This site stores test locations locally in this browser. It does not modify your iPhone's system GPS or change the location reported by other apps.
+</section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map=L.map('map').setView([37.7749,-122.4194],11);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+
+let selected=null, marker=null;
+const statusEl=document.getElementById('status');
+const coordsEl=document.getElementById('coords');
+const resultsEl=document.getElementById('results');
+
+function choose(lat,lon,label){
+ selected={lat:+lat,lon:+lon,label};
+ if(!marker) marker=L.marker([lat,lon]).addTo(map);
+ else marker.setLatLng([lat,lon]);
+ marker.bindPopup(label).openPopup();
+ map.setView([lat,lon],15);
+ coordsEl.textContent=`${(+lat).toFixed(6)}, ${(+lon).toFixed(6)}`;
+ statusEl.textContent=`Selected: ${label}`;
+ statusEl.className='status';
+}
+map.on('click',e=>choose(e.latlng.lat,e.latlng.lng,'Dropped pin'));
+
+async function search(){
+ const q=document.getElementById('q').value.trim();
+ if(!q)return;
+ const b=document.getElementById('search');
+ b.disabled=true;b.textContent='Searching…';resultsEl.innerHTML='';
+ try{
+  const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`);
+  const data=await r.json();
+  if(!data.length){resultsEl.innerHTML='<div class="small">No results found.</div>';return;}
+  data.forEach(x=>{
+   const d=document.createElement('div');d.className='result';
+   d.innerHTML=`<strong>${(x.name||x.display_name.split(',')[0])}</strong><div class="small">${x.display_name}</div>`;
+   d.onclick=()=>{choose(x.lat,x.lon,x.display_name);resultsEl.innerHTML='';};
+   resultsEl.appendChild(d);
+  });
+ }catch(e){resultsEl.innerHTML='<div class="small">Search failed. Try again.</div>';}
+ finally{b.disabled=false;b.textContent='Search';}
+}
+document.getElementById('search').onclick=search;
+document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')search();});
+
+document.getElementById('setTest').onclick=()=>{
+ if(!selected){statusEl.textContent='Choose a location first.';return;}
+ localStorage.setItem('testLocation',JSON.stringify(selected));
+ statusEl.textContent=`TEST LOCATION ACTIVE: ${selected.label}`;
+ statusEl.className='status active';
+};
+
+document.getElementById('clear').onclick=()=>{
+ localStorage.removeItem('testLocation');
+ statusEl.textContent='Test location cleared.';
+ statusEl.className='status';
+};
+
+document.getElementById('real').onclick=()=>{
+ navigator.geolocation.getCurrentPosition(
+  p=>choose(p.coords.latitude,p.coords.longitude,'My real browser location'),
+  ()=>statusEl.textContent='Location permission was denied or unavailable.',
+  {enableHighAccuracy:true,timeout:10000}
+ );
+};
+
+function loadFav(){try{return JSON.parse(localStorage.getItem('favorites')||'[]')}catch{return[]}}
+function renderFav(){
+ const f=loadFav(), box=document.getElementById('favorites');box.innerHTML='';
+ if(!f.length){box.innerHTML='<div class="small">No saved locations yet.</div>';return;}
+ f.forEach(x=>{
+  const d=document.createElement('div');d.className='favorite';
+  d.innerHTML=`<strong>${x.name}</strong><div class="small">${(+x.lat).toFixed(5)}, ${(+x.lon).toFixed(5)}</div>`;
+  d.onclick=()=>choose(x.lat,x.lon,x.label||x.name);box.appendChild(d);
+ });
+}
+document.getElementById('save').onclick=()=>{
+ if(!selected){statusEl.textContent='Choose a location first.';return;}
+ const f=loadFav();const name=prompt('Name this favorite:',selected.label.split(',')[0])||'Saved location';
+ f.push({...selected,name});localStorage.setItem('favorites',JSON.stringify(f));renderFav();
+};
+
+const s=localStorage.getItem('testLocation');
+if(s){try{const x=JSON.parse(s);choose(x.lat,x.lon,x.label);statusEl.textContent=`TEST LOCATION ACTIVE: ${x.label}`;statusEl.className='status active';}catch{}}
+renderFav();
+if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+</script>
+</body>
+</html>
