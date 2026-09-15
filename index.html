@@ -5,147 +5,304 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111827">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Location Tester">
 <title>Location Tester</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f3f4f6;color:#111827}
-.wrap{max-width:760px;margin:auto;padding:16px}
-.card{background:white;border:1px solid #e5e7eb;border-radius:16px;padding:14px;margin-bottom:14px}
-.row{display:flex;gap:8px}
-input{flex:1;padding:12px;border:1px solid #d1d5db;border-radius:12px;font-size:16px}
-button{padding:12px 14px;border:0;border-radius:12px;font-weight:600}
-.primary{background:#2563eb;color:white}.secondary{background:#eef2ff;color:#1e3a8a}.danger{background:#fee2e2;color:#991b1b}
-#map{height:420px;border-radius:14px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-.small{font-size:13px;color:#6b7280}.result,.favorite{padding:10px;border:1px solid #e5e7eb;border-radius:10px;margin-top:8px}
-.status{font-size:14px;color:#6b7280;margin-top:10px}.active{color:#15803d;font-weight:700}
+:root{
+  --bg:#f3f4f6;--card:#fff;--text:#111827;--muted:#6b7280;
+  --line:#e5e7eb;--accent:#2563eb;--danger:#b91c1c;--good:#15803d;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif}
+.wrap{max-width:780px;margin:0 auto;padding:max(16px,env(safe-area-inset-top)) 14px max(24px,env(safe-area-inset-bottom))}
+h1{font-size:27px;margin:6px 0 3px}
+.sub{font-size:14px;color:var(--muted);margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:17px;padding:13px;margin-bottom:13px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.search-wrap{position:relative}
+.search-box{display:flex;align-items:center;background:#f3f4f6;border-radius:13px;border:1px solid transparent;padding:0 11px}
+.search-box:focus-within{background:#fff;border-color:#c7d2fe}
+.search-icon{font-size:17px;color:#6b7280;margin-right:7px}
+#q{width:100%;font-size:16px;padding:12px 3px;border:0;outline:0;background:transparent}
+#clearSearch{font-size:19px;background:transparent;border:0;color:#6b7280;padding:6px;display:none}
+.suggestions{position:absolute;top:52px;left:0;right:0;z-index:1000;background:#fff;border:1px solid var(--line);border-radius:13px;box-shadow:0 12px 28px rgba(0,0,0,.16);overflow:hidden;display:none;max-height:330px;overflow-y:auto}
+.suggestion{padding:11px 13px;border-bottom:1px solid #f0f0f0;cursor:pointer}
+.suggestion:last-child{border-bottom:0}
+.suggestion:active{background:#f3f4f6}
+.s-title{font-size:15px;font-weight:600}
+.s-detail{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#map{height:430px;border-radius:14px;overflow:hidden}
+.status{font-size:13px;color:var(--muted);margin-top:9px;line-height:1.4}
+.active{color:var(--good);font-weight:700}
+.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+button.action{border:0;border-radius:12px;padding:12px 9px;font-size:14px;font-weight:650;cursor:pointer}
+.primary{background:var(--accent);color:#fff}
+.secondary{background:#eef2ff;color:#1e40af}
+.neutral{background:#f3f4f6;color:#111827}
+.danger{background:#fee2e2;color:#991b1b}
+.coord{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:#374151;margin-top:6px}
+.favorite{border:1px solid var(--line);border-radius:11px;padding:10px;margin-top:8px;cursor:pointer}
+.favorite-name{font-weight:600}
+.small{font-size:12px;color:var(--muted)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:8px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
+.dot-real{background:#2563eb}.dot-test{background:#ef4444}
 </style>
 </head>
 <body>
 <main class="wrap">
-<h1>Location Tester</h1>
-<p class="small">Choose test coordinates for your own web-development projects.</p>
+  <h1>Location Tester</h1>
+  <p class="sub">Search and select test coordinates for your own location-aware web projects.</p>
 
-<section class="card">
-<div class="row">
-<input id="q" placeholder="Search a place or address…">
-<button id="search" class="primary">Search</button>
-</div>
-<div id="results"></div>
-</section>
+  <section class="card">
+    <div class="search-wrap">
+      <div class="search-box">
+        <span class="search-icon">⌕</span>
+        <input id="q" type="search" autocomplete="off" placeholder="Search for a place or address">
+        <button id="clearSearch" aria-label="Clear search">×</button>
+      </div>
+      <div id="suggestions" class="suggestions"></div>
+    </div>
+  </section>
 
-<section class="card">
-<div id="map"></div>
-<div id="status" class="status">Tap the map or search for a place.</div>
-<div class="grid">
-<button id="setTest" class="primary">Set Test Location</button>
-<button id="real" class="secondary">Use My Real Location</button>
-<button id="save">Save Favorite</button>
-<button id="clear" class="danger">Clear Test Location</button>
-</div>
-</section>
+  <section class="card">
+    <div id="map"></div>
+    <div class="legend">
+      <span><span class="dot dot-real"></span>Your real browser location</span>
+      <span><span class="dot dot-test"></span>Selected test point</span>
+    </div>
+    <div id="status" class="status">Getting your current location…</div>
+    <div class="buttons">
+      <button id="setTest" class="action primary">Set Test Location</button>
+      <button id="recenter" class="action secondary">My Location</button>
+      <button id="save" class="action neutral">Save Favorite</button>
+      <button id="clearTest" class="action danger">Clear Test Location</button>
+    </div>
+  </section>
 
-<section class="card">
-<strong>Selected coordinates</strong>
-<div id="coords" class="small">None selected</div>
-</section>
+  <section class="card">
+    <strong>Selected coordinates</strong>
+    <div id="coords" class="coord">None selected</div>
+  </section>
 
-<section class="card">
-<strong>Favorites</strong>
-<div id="favorites"></div>
-</section>
+  <section class="card">
+    <strong>Favorites</strong>
+    <div id="favorites"></div>
+  </section>
 
-<section class="card small">
-This site stores test locations locally in this browser. It does not modify your iPhone's system GPS or change the location reported by other apps.
-</section>
+  <section class="card small">
+    The selected test location is stored only in this browser for this web app.
+    It does not replace the iPhone's system GPS or change locations shown by Find My,
+    Messages, Life360, or other apps.
+  </section>
 </main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const map=L.map('map').setView([37.7749,-122.4194],11);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+const map = L.map('map', { zoomControl: true }).setView([37.7749,-122.4194], 11);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19,
+  attribution:'&copy; OpenStreetMap contributors'
+}).addTo(map);
 
-let selected=null, marker=null;
-const statusEl=document.getElementById('status');
-const coordsEl=document.getElementById('coords');
-const resultsEl=document.getElementById('results');
+const q = document.getElementById('q');
+const suggestions = document.getElementById('suggestions');
+const clearSearch = document.getElementById('clearSearch');
+const statusEl = document.getElementById('status');
+const coordsEl = document.getElementById('coords');
+const favoritesEl = document.getElementById('favorites');
 
-function choose(lat,lon,label){
- selected={lat:+lat,lon:+lon,label};
- if(!marker) marker=L.marker([lat,lon]).addTo(map);
- else marker.setLatLng([lat,lon]);
- marker.bindPopup(label).openPopup();
- map.setView([lat,lon],15);
- coordsEl.textContent=`${(+lat).toFixed(6)}, ${(+lon).toFixed(6)}`;
- statusEl.textContent=`Selected: ${label}`;
- statusEl.className='status';
+let current = null;
+let currentMarker = null;
+let selected = null;
+let selectedMarker = null;
+let debounceTimer = null;
+let requestController = null;
+
+function esc(s){
+  return String(s ?? '')
+    .replaceAll('&','&amp;').replaceAll('<','&lt;')
+    .replaceAll('>','&gt;').replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
 }
-map.on('click',e=>choose(e.latlng.lat,e.latlng.lng,'Dropped pin'));
 
-async function search(){
- const q=document.getElementById('q').value.trim();
- if(!q)return;
- const b=document.getElementById('search');
- b.disabled=true;b.textContent='Searching…';resultsEl.innerHTML='';
- try{
-  const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`);
-  const data=await r.json();
-  if(!data.length){resultsEl.innerHTML='<div class="small">No results found.</div>';return;}
-  data.forEach(x=>{
-   const d=document.createElement('div');d.className='result';
-   d.innerHTML=`<strong>${(x.name||x.display_name.split(',')[0])}</strong><div class="small">${x.display_name}</div>`;
-   d.onclick=()=>{choose(x.lat,x.lon,x.display_name);resultsEl.innerHTML='';};
-   resultsEl.appendChild(d);
-  });
- }catch(e){resultsEl.innerHTML='<div class="small">Search failed. Try again.</div>';}
- finally{b.disabled=false;b.textContent='Search';}
+function addressText(p){
+  const bits = [];
+  if (p.street) bits.push(p.housenumber ? `${p.housenumber} ${p.street}` : p.street);
+  for (const x of [p.district,p.city,p.county,p.state,p.postcode,p.country]) {
+    if (x && !bits.includes(x)) bits.push(x);
+  }
+  return bits.join(', ');
 }
-document.getElementById('search').onclick=search;
-document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')search();});
+
+function setSelected(lat, lon, label='Dropped pin'){
+  selected = {lat:+lat, lon:+lon, label};
+  if (selectedMarker) map.removeLayer(selectedMarker);
+  selectedMarker = L.marker([selected.lat,selected.lon]).addTo(map);
+  selectedMarker.bindPopup(esc(label)).openPopup();
+  map.setView([selected.lat,selected.lon], 16);
+  coordsEl.textContent = `${selected.lat.toFixed(6)}, ${selected.lon.toFixed(6)}`;
+  statusEl.textContent = `Selected: ${label}`;
+  statusEl.className = 'status';
+}
+
+function setCurrent(lat, lon, accuracy){
+  current = {lat:+lat,lon:+lon,accuracy};
+  if (currentMarker) map.removeLayer(currentMarker);
+  currentMarker = L.circleMarker([lat,lon],{
+    radius:8,weight:3,color:'#fff',fillColor:'#2563eb',fillOpacity:1
+  }).addTo(map);
+  currentMarker.bindPopup('Your real browser location');
+}
+
+function locateAndCenter(){
+  if (!navigator.geolocation){
+    statusEl.textContent='This browser does not support location access.';
+    return;
+  }
+  statusEl.textContent='Getting your current location…';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    setCurrent(pos.coords.latitude,pos.coords.longitude,pos.coords.accuracy);
+    map.setView([current.lat,current.lon],16);
+    statusEl.textContent='Showing your real browser location. Search or tap the map to choose a test point.';
+  },err=>{
+    statusEl.textContent='Location was unavailable. Allow Location access for this site, then tap My Location.';
+  },{enableHighAccuracy:true,timeout:12000,maximumAge:15000});
+}
+
+map.on('click',e=>setSelected(e.latlng.lat,e.latlng.lng,'Dropped pin'));
+
+async function doAutocomplete(text){
+  if (requestController) requestController.abort();
+  requestController = new AbortController();
+
+  let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=6&lang=en`;
+  if (current) url += `&lat=${current.lat}&lon=${current.lon}&zoom=13`;
+
+  try{
+    const r = await fetch(url,{signal:requestController.signal});
+    if(!r.ok) throw new Error('Search failed');
+    const data = await r.json();
+    renderSuggestions(data.features || []);
+  }catch(e){
+    if(e.name !== 'AbortError'){
+      suggestions.innerHTML='<div class="suggestion"><div class="small">Search unavailable right now.</div></div>';
+      suggestions.style.display='block';
+    }
+  }
+}
+
+function renderSuggestions(features){
+  suggestions.innerHTML='';
+  if(!features.length){
+    suggestions.innerHTML='<div class="suggestion"><div class="small">No matching places found.</div></div>';
+    suggestions.style.display='block';
+    return;
+  }
+  for(const f of features){
+    const p=f.properties||{};
+    const [lon,lat]=f.geometry.coordinates;
+    const title=p.name || p.street || p.city || 'Location';
+    const detail=addressText(p);
+    const row=document.createElement('div');
+    row.className='suggestion';
+    row.innerHTML=`<div class="s-title">${esc(title)}</div><div class="s-detail">${esc(detail)}</div>`;
+    row.addEventListener('click',()=>{
+      setSelected(lat,lon, detail ? `${title}, ${detail}` : title);
+      q.value=title;
+      clearSearch.style.display='block';
+      suggestions.style.display='none';
+      q.blur();
+    });
+    suggestions.appendChild(row);
+  }
+  suggestions.style.display='block';
+}
+
+q.addEventListener('input',()=>{
+  const text=q.value.trim();
+  clearSearch.style.display=text?'block':'none';
+  clearTimeout(debounceTimer);
+  if(text.length<3){
+    suggestions.style.display='none';
+    suggestions.innerHTML='';
+    return;
+  }
+  debounceTimer=setTimeout(()=>doAutocomplete(text),350);
+});
+
+q.addEventListener('focus',()=>{
+  if(q.value.trim().length>=3 && suggestions.children.length) suggestions.style.display='block';
+});
+
+clearSearch.addEventListener('click',()=>{
+  q.value='';clearSearch.style.display='none';suggestions.style.display='none';q.focus();
+});
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.search-wrap')) suggestions.style.display='none';
+});
+
+document.getElementById('recenter').onclick=()=>{
+  if(current){
+    map.setView([current.lat,current.lon],16);
+    currentMarker.openPopup();
+  } else locateAndCenter();
+};
 
 document.getElementById('setTest').onclick=()=>{
- if(!selected){statusEl.textContent='Choose a location first.';return;}
- localStorage.setItem('testLocation',JSON.stringify(selected));
- statusEl.textContent=`TEST LOCATION ACTIVE: ${selected.label}`;
- statusEl.className='status active';
+  if(!selected){statusEl.textContent='Choose a test location first.';return;}
+  localStorage.setItem('testLocation',JSON.stringify(selected));
+  statusEl.textContent=`TEST LOCATION ACTIVE IN THIS APP: ${selected.label}`;
+  statusEl.className='status active';
 };
 
-document.getElementById('clear').onclick=()=>{
- localStorage.removeItem('testLocation');
- statusEl.textContent='Test location cleared.';
- statusEl.className='status';
+document.getElementById('clearTest').onclick=()=>{
+  localStorage.removeItem('testLocation');
+  statusEl.textContent='Test location cleared. Your real GPS was never changed.';
+  statusEl.className='status';
 };
 
-document.getElementById('real').onclick=()=>{
- navigator.geolocation.getCurrentPosition(
-  p=>choose(p.coords.latitude,p.coords.longitude,'My real browser location'),
-  ()=>statusEl.textContent='Location permission was denied or unavailable.',
-  {enableHighAccuracy:true,timeout:10000}
- );
-};
-
-function loadFav(){try{return JSON.parse(localStorage.getItem('favorites')||'[]')}catch{return[]}}
-function renderFav(){
- const f=loadFav(), box=document.getElementById('favorites');box.innerHTML='';
- if(!f.length){box.innerHTML='<div class="small">No saved locations yet.</div>';return;}
- f.forEach(x=>{
-  const d=document.createElement('div');d.className='favorite';
-  d.innerHTML=`<strong>${x.name}</strong><div class="small">${(+x.lat).toFixed(5)}, ${(+x.lon).toFixed(5)}</div>`;
-  d.onclick=()=>choose(x.lat,x.lon,x.label||x.name);box.appendChild(d);
- });
+function favorites(){
+  try{return JSON.parse(localStorage.getItem('favorites')||'[]')}catch{return[]}
+}
+function renderFavorites(){
+  const f=favorites();favoritesEl.innerHTML='';
+  if(!f.length){favoritesEl.innerHTML='<div class="small" style="margin-top:7px">No saved locations yet.</div>';return;}
+  f.forEach(x=>{
+    const d=document.createElement('div');d.className='favorite';
+    d.innerHTML=`<div class="favorite-name">${esc(x.name)}</div><div class="small">${(+x.lat).toFixed(5)}, ${(+x.lon).toFixed(5)}</div>`;
+    d.onclick=()=>setSelected(x.lat,x.lon,x.label||x.name);
+    favoritesEl.appendChild(d);
+  });
 }
 document.getElementById('save').onclick=()=>{
- if(!selected){statusEl.textContent='Choose a location first.';return;}
- const f=loadFav();const name=prompt('Name this favorite:',selected.label.split(',')[0])||'Saved location';
- f.push({...selected,name});localStorage.setItem('favorites',JSON.stringify(f));renderFav();
+  if(!selected){statusEl.textContent='Choose a test location first.';return;}
+  const f=favorites();
+  const name=prompt('Name this favorite:',selected.label.split(',')[0])||'Saved location';
+  f.push({...selected,name});
+  localStorage.setItem('favorites',JSON.stringify(f));
+  renderFavorites();
 };
 
-const s=localStorage.getItem('testLocation');
-if(s){try{const x=JSON.parse(s);choose(x.lat,x.lon,x.label);statusEl.textContent=`TEST LOCATION ACTIVE: ${x.label}`;statusEl.className='status active';}catch{}}
-renderFav();
-if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+const saved=localStorage.getItem('testLocation');
+if(saved){
+  try{
+    const x=JSON.parse(saved);
+    setSelected(x.lat,x.lon,x.label||'Saved test location');
+    statusEl.textContent=`TEST LOCATION ACTIVE IN THIS APP: ${x.label||'Saved test location'}`;
+    statusEl.className='status active';
+  }catch{}
+}
+
+renderFavorites();
+locateAndCenter();
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+}
 </script>
 </body>
 </html>
